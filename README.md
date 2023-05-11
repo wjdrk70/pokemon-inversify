@@ -1,6 +1,6 @@
 # inversify 를 활용한 의존성주입
 
-##배포링크
+## 배포링크
 https://pokemon-inversify.vercel.app/
 
 ## 의존성주입
