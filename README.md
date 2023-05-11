@@ -1,46 +1,118 @@
-# Getting Started with Create React App
+# inversify 를 활용한 의존성주입
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+## 의존성주입
 
-## Available Scripts
+inversifyJS 와 reflect-metadata 를
+활용한 의존성 주입과 repository 패턴을
+구현 해보았습니다.
 
-In the project directory, you can run:
+## tsconfig
 
-### `npm start`
+```json
+    "lib": ["dom", "dom.iterable", "es6", "esnext"],
+  "types": ["reflect-metadata", "node"],
+  "experimentalDecorators": true,
+  "emitDecoratorMetadata": true,
+```
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+reflect-metatadata 를 tsconfig 에 추가하여
+데코레이터 속성을 활성화
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+PokemonRepository.ts
 
-### `npm test`
+```typescript
+@injectable()
+class PokemonRepositoryImpl implements PokemonRepository {
+  async getPokemon(id: number): Promise<ExtendedPokemon> {
+    const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`);
+    const data = await response.json();
+    const pokemon: ExtendedPokemon = {
+      name: data.name,
+      imageUrl: data.sprites.front_default,
+      types: data.types.map((type: any) => type.type.name),
+      height: data.height,
+      abilities: data.abilities.map((ability: any) => ability.ability.name),
+      generations: Object.keys(data.sprites.versions),
+      selectedGeneration: "",
+      selectedDepth: "",
+      sprites: data.sprites,
+    };
+    console.log("get", pokemon);
+    return pokemon;
+  }
+}
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+getPokemon method 를 간단하게 만들고 ExtendedPokemon 으로
+mapping 합니다.
+`@injectable()` 데코레이터를
+써서 repository를 주입합니다.
 
-### `npm run build`
+IoC 제어역전
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```typescript
+const container = new Container();
+container
+  .bind<PokemonRepository>("PokemonRepository")
+  .to(PokemonRepositoryImpl)
+  .inSingletonScope();
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+const usePokemonRepository = () => {
+  const pokemonRepository =
+    container.get<PokemonRepository>("PokemonRepository");
+  const [pokemon, setPokemon] = useState<ExtendedPokemon | null>(null);
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+  useEffect(() => {
+    const fetchData = async () => {
+      const response = await fetch("https://pokeapi.co/api/v2/pokemon");
+      const data = await response.json();
+      const totalPokemonCount = data.count;
+      const randomPokemonId = Math.floor(Math.random() * totalPokemonCount) + 1;
+      const randomPokemon = await pokemonRepository.getPokemon(randomPokemonId);
+      setPokemon(randomPokemon);
+    };
 
-### `npm run eject`
+    if (!pokemon) {
+      fetchData();
+    }
+  }, [pokemon, pokemonRepository]);
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+  const handleGenerationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedGeneration = e.target.value;
+    setPokemon((prevPokemon: any) => ({
+      ...prevPokemon!,
+      selectedGeneration,
+      selectedDepth: "",
+    }));
+  };
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+  const handleDepthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedDepth = e.target.value;
+    setPokemon((prevPokemon: any) => ({
+      ...prevPokemon!,
+      selectedDepth,
+    }));
+  };
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+  const handleRandomPokemon = () => {
+    setPokemon(null);
+  };
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+  return {
+    pokemon,
+    handleGenerationChange,
+    handleDepthChange,
+    handleRandomPokemon,
+  };
+};
+```
 
-## Learn More
+`inversify` 에서 가져온 새 `container` 를 인스턴스화
+합니다. 그리고 고유 키 로 구현할때 바인딩 합니다.
+인스턴스를 한번만 정의하거기 떄문에
+`inSigletonScope()`를 사용
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
+구현을 해보면서 nestJS 처럼 비슷하게 entity 구조와
+injection 을 비슷하게 해보고 싶었지만,
+점차 코드를 리팩토링하면서 고쳐가고싶습니다.
+서비스가 크면 복잡하지만 유지보수 측면에서는 좋을거 같습니다.
